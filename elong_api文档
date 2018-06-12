@@ -1,0 +1,34 @@
+
+一.  获取酒店列表页
+请求方式 /search_list?xxx=xxx&  GET
+
+需要 4个 参数：
+city  -----   实际上是cityid  详情见elong_city.csv 两个文件
+indate -----  入住日期    格式必须为 如 2018-06-12
+outdate ----  离开日期    同上 ，注意 离开日期必须大于 入住日期  T+1
+page ------ 页码    0 为第一页
+
+返回的数据 json格式
+
+
+
+二. 获取酒店详情页
+请求方式 /search_detail?xxx=xxx&xx GET
+
+需要 3个 参数:
+HId  ------ 酒店的HId
+indate
+outdate
+
+return json格式
+
+三. 按关键字查找酒店
+请求方式 /search_hotel?xxx=xxx GET
+
+需要 4个 参数
+indate
+outdate
+city
+keywords  ----- 检索的关键字可以是 酒店名字，地址   可以为空
+
+return json格式

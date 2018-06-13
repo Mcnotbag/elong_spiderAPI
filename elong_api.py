@@ -1,5 +1,9 @@
 import json
 import re
+import string
+from urllib import parse
+
+from lxml import etree
 
 import requests
 from flask import jsonify, request
@@ -21,6 +25,9 @@ api.url_map.converters['re'] = Regex_url
 hotel_list_url = "http://m.elong.com/hotel/api/list?_rt=1527472905302&indate={Indate}&t=1527472904279&outdate={Outdate}&city={cityId}&pageindex={page}&actionName=h5%3D%3Ebrand%3D%3EgetHotelList&ctripToken=&elongToken=dc8bc8aa-b5cb-4cc0-a09e-4291a67df718&esdnum=9168910"
 hotel_detail_url = "http://m.elong.com/hotel/api/hoteldetailroomlist?_rt=1527476977933&hotelid={HId}&indate={Indate}&outdate={Outdate}&actionName=h5%3D%3Ebrand%3D%3EgetHotelDetail&ctripToken=&elongToken=dc8bc8aa-b5cb-4cc0-a09e-4291a67df718&esdnum=7556144"
 search_url = "http://m.elong.com/hotel/api/list?_rt=1528793341562&pageindex={page}&indate={Indate}&outdate={Outdate}&actionName=h5=>brand=>getHotelList&ctripToken=&elongToken=dc8bc8aa-b5cb-4cc0-a09e-4291a67df718&esdnum=7776463&keywords={keywords}&city={cityId}"
+baidu_search_list_url = "https://map.baidu.com/mobile/webapp/search/search/qt=s&wd={keywords}&c=340&searchFlag=bigBox&version=5&exptype=dep&src_from=webapp_all_bigbox&sug_forward=&src=2/vt=/?pagelets[]=pager&pagelets[]=page_data&t=937717"
+baidu_search_detail_url = "https://map.baidu.com/hotel?qt=ota_order_price&from=maponline&t=1528871587017&st={Indate}&et={Outdate}&uid={uid}&v=3.1&expvar=hotel_detail_new&app_from=map&ishour=0&src_from=webapp_all_bigbox&pindex=0&size=20"
+baidu_hname_filter_url = "https://map.baidu.com/su?wd={keywords}&callback=suggestion_1528872905826&cid=2298&b=&pc_ver=2&type=0&newmap=1&ie=utf-8&callback=jsonp3"
 
 list_headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -99,6 +106,7 @@ def search_list():
     # 方案2
     for hotel in hotels_list:
         hotel["HId"] = re.findall(r'http://m.elong.com/hotel/(\d+)/', hotel["detailPageUrl"])[0]
+        # print(hotel["hotelName"])
 
     return jsonify(hotels_list=hotels_list)
 
@@ -108,8 +116,9 @@ def search_detail():
     HId = request.args.get("HId")
     in_date = request.args.get("indate")
     out_date = request.args.get("outdate")
+    Hname = request.args.get("name")
 
-    if None in (HId,in_date,out_date):
+    if None in (HId,in_date,out_date,Hname):
         return jsonify(error="参数不完整")
 
     if len(in_date) != 10 or len(out_date) != 10:
@@ -129,48 +138,103 @@ def search_detail():
     html_str = response.content.decode()
     html_json = json.loads(html_str)
     room_list = html_json["roomInfoList"]
-    # 方案1
-    #return jsonify(room_list=room_list)
+    try:
+        elong_low_price = room_list[0]["minAveragePriceSubTotal"]
+    except Exception as e:
+        print(e)
+        elong_low_price = 0
+    baidu_low_price = 0
 
-    # 方案2
-    if room_list:
+    # 方案1
+    baidu_list_hearders = {
+        'User-Agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1',
+        'Referer':'https://map.baidu.com/mobile/webapp/index/index/',
+        'Host':'map.baidu.com',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+    }
+    # 搜索文字过滤
+    Hname_quete = parse.quote(Hname,safe=string.printable)
+    keywords_response = requests.get(baidu_hname_filter_url.format(keywords=Hname_quete),headers=baidu_list_hearders)
+    keywords_response_json = json.loads(keywords_response.content.decode()[25:-1]) # 可能会报错
+    new_keywords_str = keywords_response_json["s"][0]
+    Hname,baidu_uuid = re.findall(r"\w+\$\w+\$\$([\w\(\)]+)\$\w+\$([0-9a-zA-Z]+)\$\w+\$\w+\$",new_keywords_str)[0]
+    # 向百度求情获取酒店列表
+    # baidu_list_response = requests.get(baidu_search_list_url.format(keywords=Hname_quete),headers=baidu_list_hearders)
+    # baidu_list_html_str = baidu_list_response.content.decode()
+    # html = etree.HTML(baidu_list_html_str)
+    # baidu_hotel_id_str = html.xpath("//div[@id='fis_elm__6']//ul/li[1]/a/@href")[0]
+    # baidu_uuid = re.findall(r"uid=(\w+)&", baidu_hotel_id_str)[0]
+    # 获取百度uuid 向百度详情页发出请求
+    baidu_detail_response = requests.get(baidu_search_detail_url.format(Indate=in_date,Outdate=out_date,uid=baidu_uuid),headers=baidu_list_hearders)
+    baidu_detail_response_json = json.loads(baidu_detail_response.content.decode())
+    if baidu_detail_response_json["errorMsg"] == "success":
+        baidu_low_price = baidu_detail_response_json["data"]["room_data"][0]["lowest_price"]
+
+    # print(baidu_low_price)
+    # print(elong_low_price)
+    if int(elong_low_price) <= int(baidu_low_price):
+        # 方案2
+        if room_list:
+            rooms_list = []
+            for room in room_list:
+                Room = {}
+                Room["RId"] = room["roomId"]
+                Room["RId"] = str(HId) + str(Room["RId"])
+                Room["Rname"] = room["roomInfoName"]
+                Room["Rarea"] = room["area"]
+                Room["Rbed"] = room["bed"]
+                Room["Cover"] = room["coverImageUrl"]
+                Room["images"] = room["imageList"]
+                Room["price"] = room["minAveragePriceSubTotal"]
+                # 一些必要的信息
+                Room["room"] = []
+                for rprice in room["rpList"]:
+
+                    Ptype = {}
+                    addinfo = rprice["additionInfoList"]
+
+                    Room["People"] = 0
+                    Room["floor"] = ''
+                    for info in addinfo:
+                        if "floor" in str(info) or 'desp: "楼层"' in str(info):
+                            Room["floor"] = info.get("content")
+                        if "psnnum" in str(info) or "可入住人数" in str(info):
+                            Room["People"] = info.get("content")
+                        if "breakfast" in str(info) or 'desp: "早餐"' in str(info):
+                            Ptype["breakfast"] = info.get("content")
+                    Ptype["PId"] = rprice["ratePlanId"]
+                    Ptype["PId"] = str(Room["RId"]) + str(Ptype["PId"])
+                    Ptype["rule"] = rprice["cancelTag"]
+                    Ptype["price"] = rprice["averagePriceSubTotal"]
+                    Ptype["Pname"] = rprice["productName"]
+                    Ptype["Pname"] = Room["Rname"] + Ptype["Pname"]
+                    Room["room"].append(Ptype)
+                rooms_list.append(Room)
+            return jsonify(room_list=rooms_list)
+    else:
+        # rooms_list = baidu_detail_response_json["data"]["room_data"]
+        # return jsonify(room_list=rooms_list)
+        room_list = baidu_detail_response_json["data"]["room_data"]
         rooms_list = []
         for room in room_list:
             Room = {}
-            Room["RId"] = room["roomId"]
-            Room["RId"] = str(HId) + str(Room["RId"])
-            Room["Rname"] = room["roomInfoName"]
-            Room["Rarea"] = room["area"]
-            Room["Rbed"] = room["bed"]
-            Room["Cover"] = room["coverImageUrl"]
-            Room["images"] = room["imageList"]
-            Room["price"] = room["minAveragePriceSubTotal"]
-            # 一些必要的信息
+            Room["Rname"] = room["room_type_name"]
+            Room["Rarea"] = room["base_info"]["area"] if "area" in str(room["base_info"]) else ''
+            Room["Rbed"] = room["base_info"]["bed_type"]
+            Room["floor"] = room["base_info"]["floor"] if "floor" in str(room["base_info"]) else ''
+            Room["Cover"] = room["base_info"]["images"][0] if room["base_info"]["images"] != [] else ''
+            Room["images"] = room["base_info"]["images"]
+            Room["price"] = room["lowest_price"]
             Room["room"] = []
-            for rprice in room["rpList"]:
-
+            for rprice in room["price_info"]:
                 Ptype = {}
-                addinfo = rprice["additionInfoList"]
-
-                Ptype["People"] = 0
-                Ptype["floor"] = ''
-                for info in addinfo:
-                    if "floor" in str(info) or 'desp: "楼层"' in str(info):
-                        Ptype["floor"] = info.get("content")
-                    if "psnnum" in str(info) or "可入住人数" in str(info):
-                        Ptype["People"] = info.get("content")
-                    if "breakfast" in str(info) or 'desp: "早餐"' in str(info):
-                        Ptype["breakfast"] = info.get("content")
-                Ptype["PId"] = rprice["ratePlanId"]
-                Ptype["PId"] = str(Room["RId"]) + str(Ptype["PId"])
-                Ptype["rule"] = rprice["cancelTag"]
-                Ptype["price"] = rprice["averagePriceSubTotal"]
-                Ptype["Pname"] = rprice["productName"]
-                Ptype["Pname"] = Room["Rname"] + Ptype["Pname"]
+                Ptype["rule"] = rprice["cancel_policy"]
+                Ptype["Pname"] = rprice["ota_room_name"]
+                Ptype["price"] = rprice["actual_price"]
+                Ptype["breakfast"] = rprice["breakfast"]
                 Room["room"].append(Ptype)
             rooms_list.append(Room)
         return jsonify(room_list=rooms_list)
-
 
 @api.route("/search_hotel",methods=["GET"])
 def search_hotel():

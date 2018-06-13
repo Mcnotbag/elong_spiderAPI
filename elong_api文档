@@ -12,11 +12,12 @@ page ------ 页码    0 为第一页
 
 
 
-二. 获取酒店详情页
+二. 获取酒店详情页      酒店价格进行对比，返回最低的网站数据
 请求方式 /search_detail?xxx=xxx&xx GET
 
 需要 3个 参数:
 HId  ------ 酒店的HId
+name ------ 酒店名称 （这个名称越详细越好）
 indate
 outdate
 

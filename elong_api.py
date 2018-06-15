@@ -25,6 +25,7 @@ api.url_map.converters['re'] = Regex_url
 hotel_list_url = "http://m.elong.com/hotel/api/list?_rt=1527472905302&indate={Indate}&t=1527472904279&outdate={Outdate}&city={cityId}&pageindex={page}&actionName=h5%3D%3Ebrand%3D%3EgetHotelList&ctripToken=&elongToken=dc8bc8aa-b5cb-4cc0-a09e-4291a67df718&esdnum=9168910"
 hotel_detail_url = "http://m.elong.com/hotel/api/hoteldetailroomlist?_rt=1527476977933&hotelid={HId}&indate={Indate}&outdate={Outdate}&actionName=h5%3D%3Ebrand%3D%3EgetHotelDetail&ctripToken=&elongToken=dc8bc8aa-b5cb-4cc0-a09e-4291a67df718&esdnum=7556144"
 search_url = "http://m.elong.com/hotel/api/list?_rt=1528793341562&pageindex={page}&indate={Indate}&outdate={Outdate}&actionName=h5=>brand=>getHotelList&ctripToken=&elongToken=dc8bc8aa-b5cb-4cc0-a09e-4291a67df718&esdnum=7776463&keywords={keywords}&city={cityId}"
+near_hotel_url = "http://m.elong.com/hotel/api/list?_rt=1529044784907&lbstype=2&indate={Indate}&startlng={lng}&startlat={lat}&outdate={Outdate}&isnear=1&city={cityId}&pageindex={page}&actionName=h5%3D%3Ebrand%3D%3EgetHotelList&ctripToken=&elongToken=&esdnum=7898076"
 baidu_search_list_url = "https://map.baidu.com/mobile/webapp/search/search/qt=s&wd={keywords}&c=340&searchFlag=bigBox&version=5&exptype=dep&src_from=webapp_all_bigbox&sug_forward=&src=2/vt=/?pagelets[]=pager&pagelets[]=page_data&t=937717"
 baidu_search_detail_url = "https://map.baidu.com/hotel?qt=ota_order_price&from=maponline&t=1528871587017&st={Indate}&et={Outdate}&uid={uid}&v=3.1&expvar=hotel_detail_new&app_from=map&ishour=0&src_from=webapp_all_bigbox&pindex=0&size=20"
 baidu_hname_filter_url = "https://map.baidu.com/su?wd={keywords}&callback=suggestion_1528872905826&cid=&b=&pc_ver=2&type=0&newmap=1&ie=utf-8&callback=jsonp3"
@@ -157,7 +158,7 @@ def search_detail():
     keywords_response = requests.get(baidu_hname_filter_url.format(keywords=Hname_quete),headers=baidu_list_hearders)
     keywords_response_json = json.loads(keywords_response.content.decode()[25:-1]) # 可能会报错
     new_keywords_str = keywords_response_json["s"][0]
-    Hname,baidu_uuid = re.findall(r"\w+\$\w+\$\$([\w\(\)]+)\$\w+\$([0-9a-zA-Z]+)\$\w+\$\w+\$",new_keywords_str)[0]
+    Hname,baidu_uuid = re.findall(r"\w+\$\w+\$\$(.*?)\$\w+\$([0-9a-zA-Z]+)\$\w+\$\w+\$",new_keywords_str)[0]
     # 向百度求情获取酒店列表
     # baidu_list_response = requests.get(baidu_search_list_url.format(keywords=Hname_quete),headers=baidu_list_hearders)
     # baidu_list_html_str = baidu_list_response.content.decode()
@@ -173,7 +174,6 @@ def search_detail():
     # print(baidu_low_price)
     # print(elong_low_price)
     if int(elong_low_price) <= int(baidu_low_price):
-        # 方案2
         if room_list:
             rooms_list = []
             for room in room_list:
@@ -303,7 +303,7 @@ def search_hotel():
 
 @api.route("/search_baidudetail",methods=["GET"])
 def search_baidudetail():
-    Hname = request.args.get("name")
+    # Hname = request.args.get("name")
     uuid = request.args.get("uuid")
     in_date = request.args.get("indate")
     out_date = request.args.get("outdate")
@@ -353,6 +353,40 @@ def search_baidudetail():
         # print(baidu_detail_response_json["errorMsg"])
         return jsonify(error="无合作方酒店数据")
 
+
+@api.route("/search_near",methods=["GET"])
+def search_near():
+    in_date = request.args.get("indate")
+    out_date = request.args.get("outdate")
+    cityId = request.args.get("city",2003)
+    lng = request.args.get("lng")
+    lat = request.args.get("lat")
+    page = request.args.get("page","0")
+
+    if None in (in_date,out_date,lng,lat,page,cityId):
+        return jsonify(error="参数不完整")
+
+    if len(in_date) != 10 or len(out_date) != 10:
+        return jsonify(error="参数格式不正确")
+
+    try:
+        float(lat)
+        float(lng)
+    except Exception as e:
+        return jsonify(error="参数格式不正确")
+
+    response = requests.get(near_hotel_url.format(Indate=in_date,Outdate=out_date,cityId=cityId,page=page,lat=lat,lng=lng))
+    if response.status_code != 200:
+        return jsonify(error="网络异常,请重新尝试")
+
+    html_str = response.content.decode()
+    html_json = json.loads(html_str)
+
+    hotels_list = html_json["hotelList"]
+    for hotel in hotels_list:
+        hotel["HId"] = re.findall(r'http://m.elong.com/hotel/(\d+)/', hotel["detailPageUrl"])[0]
+
+    return jsonify(hotels_list=hotels_list)
 
 if __name__ == '__main__':
     api.run(host='0.0.0.0')

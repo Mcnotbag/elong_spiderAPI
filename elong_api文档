@@ -15,13 +15,16 @@ page ------ 页码    0 为第一页
 二. 获取酒店详情页      酒店价格进行对比，返回最低的网站数据
 请求方式 /search_detail?xxx=xxx&xx GET
 
-需要 3个 参数:
+需要 4个 参数:
 HId  ------ 酒店的HId
 name ------ 酒店名称 （这个名称越详细越好）
 indate
 outdate
 
+价格对比后返回价格低的来源
 return json格式
+
+
 
 三. 按关键字查找酒店
 请求方式 /search_hotel?xxx=xxx GET
@@ -32,4 +35,38 @@ outdate
 city
 keywords  ----- 检索的关键字可以是 酒店名字，地址   可以为空
 
-return json格式
+# 返回两种种可能
+1.酒店找到了返回一个酒店列表页
+与 一 search_list 返回一样
+2.没有找到酒店将向百度搜索
+返回一个列表  [{"Hname"="xxxxx","uuid"="xxxx"},{}]  列表可展示给用户，让用户进行二次选择
+
+返回json格式
+
+
+
+四. 如果 三 未找到 进行二次请求
+请求方式 /search_baidudetail GET
+需要 3个 参数
+indate
+outdate
+uuid    三返回的数值
+
+
+return json格式  同 二
+
+
+
+五. 查找附近的酒店
+请求方式 /search_near GET
+需要 6个 参数
+indate
+outdate
+page   --------默认是0,翻页+1
+city  ------- 城市对应的id
+lat   -------- 纬度
+lng  ------- 经度
+
+
+返回json格式  酒店列表
+

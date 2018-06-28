@@ -1,6 +1,6 @@
 import logging
 
-from flask import jsonify, json, request, session, g
+from wsgi import jsonify, json, request, session, g
 
 from ihome_main import redis_store, constants, db
 from ihome_main.api_1_0 import api

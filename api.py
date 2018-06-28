@@ -1,7 +1,7 @@
 import json
 from flask_sqlalchemy import SQLAlchemy
-from flask import jsonify
-from flask import Flask
+from wsgi import jsonify
+from wsgi import Flask
 from werkzeug.routing import BaseConverter
 from flask_msearch import Search
 

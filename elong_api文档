@@ -1,4 +1,8 @@
 
+http://111.230.34.217:5666/flask/
+
+
+
 一.  获取酒店列表页
 请求方式 /search_list?xxx=xxx&  GET
 

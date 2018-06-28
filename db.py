@@ -14,7 +14,7 @@ import pymssql
 
 class DbServer(object):
     def __init__(self):
-        self.conn =pymssql.connect(host='192.168.2.135\sql2008', user='sa', password='sa', database='HotelSpider')
+        self.conn =pymssql.connect(host='119.145.8.187:16433', user='sa', password='Ecaim6688.', database='HotelSpider')
         self.cur = self.conn.cursor()
 
     def __del__(self):
